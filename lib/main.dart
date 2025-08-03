@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pantry_organizer/secrets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 
@@ -7,7 +8,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://fapcmoinfamjcougtsib.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZhcGNtb2luZmFtamNvdWd0c2liIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyNTQ3MTAsImV4cCI6MjA2OTgzMDcxMH0.aWOSKxzwtLWYr1QDcBc47us-oHQf2toT9D8VSr2rNLI'
+    anonKey: apiKey
   );
   runApp(const MyApp());
 }
