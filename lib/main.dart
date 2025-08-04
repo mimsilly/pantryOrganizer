@@ -7,7 +7,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'https://fapcmoinfamjcougtsib.supabase.co',
+    url: apiURL,
     anonKey: apiKey
   );
   runApp(const MyApp());
