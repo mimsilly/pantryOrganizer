@@ -12,6 +12,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   List<Map<String, dynamic>> _locations = [];
   bool _loading = true;
   String? _error;
@@ -62,10 +64,7 @@ void _goToCreateLocation() async {
 
 
   void _goToSettings() {
-    // TODO: Implement settings page
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings not implemented yet')),
-    );
+    _scaffoldKey.currentState?.openDrawer();
   }
 
   @override
@@ -73,13 +72,48 @@ void _goToCreateLocation() async {
     final screenWidth = MediaQuery.of(context).size.width;
     final itemWidth = screenWidth / 3;
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: const Text('Home'),
         leading: IconButton(
           icon: const Icon(Icons.settings),
-          onPressed: _goToSettings,
+          onPressed: () {
+            _goToSettings();
+          },
         ),
       ),
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Colors.blue),
+                child: Text('Settings', style: TextStyle(color: Colors.white, fontSize: 24)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text('Change Household'),
+                onTap: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('selected_household_id');
+                  if (!context.mounted) return;
+                  Navigator.pushReplacementNamed(context, '/households');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Log Out'),
+                onTap: () async {
+                  await Supabase.instance.client.auth.signOut();
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('selected_household_id');
+                  if (!context.mounted) return;
+                  Navigator.pushReplacementNamed(context, '/');
+                },
+              ),
+            ],
+          ),
+        ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
