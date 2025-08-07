@@ -3,35 +3,56 @@ import 'package:pantry_organizer/pages/home_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pantry_organizer/pages/household_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pantry_organizer/services/auth_services.dart';
 
 
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Delay ensures context is valid for Navigator
+    Future.delayed(Duration.zero, () {
+      AuthServices.configDeepLink(context);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = Supabase.instance.client.auth.currentSession;
 
-    if (session != null) {
-      return FutureBuilder<String?>(
-        future: _getSavedHouseholdId(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const CircularProgressIndicator();
-          }
+        if (session != null) {
+          return FutureBuilder<String?>(
+            future: _getSavedHouseholdId(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final householdId = snapshot.data;
-          if (householdId != null) {
-            return const HomePage(); // household_id is stored, go to home
-          } else {
-            return const HouseholdScreen(); // user must select household
-          }
-        },
-      );
-    } else {
-      return const AuthPage();
-    }
+              final householdId = snapshot.data;
+              if (householdId != null) {
+                return const HomePage();
+              } else {
+                return const HouseholdScreen();
+              }
+            },
+          );
+        } else {
+          return const AuthPage();
+        }
+      },
+    );
   }
 }
 
@@ -97,6 +118,15 @@ class _AuthPageState extends State<AuthPage> {
               obscureText: true,
             ),
             const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/reset-password-request');
+              },
+              child: const Text(
+                'Forgot your password?',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
             ElevatedButton(onPressed: _login, child: const Text('Login')),
             TextButton(onPressed: _signUp, child: const Text('Register')),
             if (_error.isNotEmpty) Text(_error, style: const TextStyle(color: Colors.red)),
