@@ -75,10 +75,7 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _login() async {
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
+      AuthServices.loginEmailPassword(_emailController.text,_passwordController.text);
       setState(() {});
     } catch (e) {
       setState(() {

@@ -28,6 +28,12 @@ class AuthServices {
     });
   }
 
+  static Future<void> loginEmailPassword(loginEmail, loginPassword) async {
+    await client().auth.signInWithPassword(
+    email: loginEmail,
+    password: loginPassword);
+  }
+
   static Future<void> resetPassword(String newPassword) async {
 
    await client().auth.updateUser(UserAttributes(password:newPassword));
