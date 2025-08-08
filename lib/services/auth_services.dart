@@ -1,9 +1,5 @@
-import 'package:app_links/app_links.dart';
-import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-
-import 'package:pantry_organizer/pages/reset_password_screen.dart';
 
 class AuthServices {
 
@@ -14,7 +10,11 @@ class AuthServices {
     return supabase;
   }
 
-
+  static Future<void> logOut() async{
+    await Supabase.instance.client.auth.signOut();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('selected_household_id');
+  }
 
   static Future<void> loginEmailPassword(loginEmail, loginPassword) async {
     await client().auth.signInWithPassword(

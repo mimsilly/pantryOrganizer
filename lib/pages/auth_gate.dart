@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 
-import 'package:pantry_organizer/pages/household_screen.dart';
+import 'package:pantry_organizer/pages/select_household_screen.dart';
 import 'package:pantry_organizer/pages/home_page.dart';
 import 'package:pantry_organizer/services/auth_services.dart';
 import 'package:pantry_organizer/services/deep_link_service.dart';
