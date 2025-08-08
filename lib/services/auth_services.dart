@@ -16,18 +16,6 @@ class AuthServices {
 
 
 
- static void configDeepLink(BuildContext context) {
-    final appLinks = AppLinks();
-
-
-    appLinks.uriLinkStream.listen((uri) {
-      if (uri.host == 'password-reset') {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (context) => ResetPasswordScreen(),));
-      }
-    });
-  }
-
   static Future<void> loginEmailPassword(loginEmail, loginPassword) async {
     await client().auth.signInWithPassword(
     email: loginEmail,

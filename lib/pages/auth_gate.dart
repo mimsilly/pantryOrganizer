@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:pantry_organizer/pages/home_page.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:pantry_organizer/pages/household_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+
+import 'package:pantry_organizer/pages/household_screen.dart';
+import 'package:pantry_organizer/pages/home_page.dart';
 import 'package:pantry_organizer/services/auth_services.dart';
+import 'package:pantry_organizer/services/deep_link_service.dart';
 
 
 
@@ -18,11 +21,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-
-    // Delay ensures context is valid for Navigator
-    Future.delayed(Duration.zero, () {
-      AuthServices.configDeepLink(context);
-    });
+    DeepLinkService().init(context);
   }
 
   @override
@@ -31,8 +30,10 @@ class _AuthGateState extends State<AuthGate> {
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final session = Supabase.instance.client.auth.currentSession;
-
         if (session != null) {
+          // Handle pending invite after login
+          DeepLinkService().acceptPendingInvite(context);
+
           return FutureBuilder<String?>(
             future: _getSavedHouseholdId(),
             builder: (context, snapshot) {
