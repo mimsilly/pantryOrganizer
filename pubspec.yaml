@@ -37,7 +37,8 @@ dependencies:
   app_links: ^6.3.3
   supabase_flutter: ^2.0.0
   shared_preferences: ^2.2.2
-
+  material_symbols_icons: ^4.2858.1
+  cached_network_image: ^3.4.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

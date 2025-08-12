@@ -14,17 +14,17 @@ class CreateLocationPage extends StatefulWidget {
 class _CreateLocationPageState extends State<CreateLocationPage> {
   final TextEditingController _nameController = TextEditingController();
   int? _selectedIconId;
+  int? _selectedColorId;
   String? _error;
   bool _isLoading = false;
 
 
   Future<void> _createLocation() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty || _selectedIconId == null) {
-      setState(() => _error = 'Please enter a name and select an icon.');
+    if (name.isEmpty || _selectedIconId == null || _selectedColorId == null) {
+      setState(() => _error = 'Please enter a name, select an icon, and a color.');
       return;
     }
-
     final prefs = await SharedPreferences.getInstance();
     final householdId = prefs.getString('selected_household_id');
 
@@ -43,6 +43,8 @@ class _CreateLocationPageState extends State<CreateLocationPage> {
         'name': name,
         'household_id': householdId,
         'icon_id': _selectedIconId,
+        'color_id': _selectedColorId, // Store the index in DB
+
       });
 
       if (!mounted) return;
@@ -54,11 +56,42 @@ class _CreateLocationPageState extends State<CreateLocationPage> {
     }
   }
 
+Widget _buildColorPicker() {
+  return GridView.builder(
+    itemCount: availableColors.length,
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    padding: const EdgeInsets.all(8),
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 6,
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+    ),
+    itemBuilder: (context, index) {
+      final isSelected = index == _selectedColorId;
+      return GestureDetector(
+        onTap: () => setState(() => _selectedColorId = index),
+        child: Container(
+          decoration: BoxDecoration(
+            color: availableColors[index],
+            border: Border.all(
+              color: isSelected ? Colors.blue : Colors.transparent,
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          width: 40,
+          height: 40,
+        ),
+      );
+    },
+  );
+}
 
 
 Widget _buildIconPicker() {
   return GridView.builder(
-    itemCount: availableIcons.length,
+    itemCount: locationsIcons.length,
     shrinkWrap: true,
     physics: const NeverScrollableScrollPhysics(),
     padding: const EdgeInsets.all(8),
@@ -83,7 +116,7 @@ Widget _buildIconPicker() {
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Image.asset(
-              availableIcons[index],
+              locationsIcons[index],
               fit: BoxFit.contain,
             ),
           ),
@@ -112,6 +145,9 @@ Widget _buildIconPicker() {
               child: Text('Select Icon:', style: TextStyle(fontSize: 16)),
             ),
             _buildIconPicker(),
+            const SizedBox(height: 16),
+            const Text('Select Color:', style: TextStyle(fontSize: 16)),
+            _buildColorPicker(),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),

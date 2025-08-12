@@ -10,6 +10,7 @@ import 'package:pantry_organizer/pages/create_location.dart';
 import 'package:pantry_organizer/pages/reset_password_request_page.dart';
 import 'package:pantry_organizer/pages/reset_password_screen.dart';
 import 'package:pantry_organizer/pages/manage_household_screen.dart';
+import 'package:pantry_organizer/pages/all_items_list.dart';
 
 
 Future<void> main() async {
@@ -40,6 +41,8 @@ class MyApp extends StatelessWidget {
         '/reset-password-request': (context) => const ResetPasswordRequestPage(),
         '/reset-password': (context) => const ResetPasswordScreen(),
         '/manage-household': (context) => const ManageHouseholdScreen(),
+        '/all-items-list': (context) => const AllItemsList(),
+
       },
     );
   }

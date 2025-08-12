@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ManageHouseholdScreen extends StatefulWidget {
-  const ManageHouseholdScreen({Key? key}) : super(key: key);
+  const ManageHouseholdScreen({super.key});
 
   @override
   State<ManageHouseholdScreen> createState() => _ManageHouseholdScreenState();
