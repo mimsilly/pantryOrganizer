@@ -20,7 +20,8 @@ class AllItemsList extends StatefulWidget {
 class _AllItemsListState extends State<AllItemsList> {
   ViewType _currentView = ViewType.list;
   SortBy _sortBy = SortBy.name;
-
+  String? _selectedLocationId;
+  String? _selectedLocationName;
 
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
@@ -38,6 +39,8 @@ class _AllItemsListState extends State<AllItemsList> {
     setState(() {
       _currentView = ViewType.values[prefs.getInt('viewType') ?? 0];
       _sortBy = SortBy.values[prefs.getInt('sortBy') ?? 0];
+      _selectedLocationId = prefs.getString('selected_location_id');
+      _selectedLocationName = prefs.getString('selected_location_name');
     });
   }
 
@@ -60,11 +63,16 @@ class _AllItemsListState extends State<AllItemsList> {
         return;
       }
 
-      // Fetch items with their location details
-      final response = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('items')
           .select('id, name, quantity, unit, brand,expiration_date, image_url, icon_id, locations(color_id, name)')
           .eq('household_id', householdId);
+
+      if (_selectedLocationId != null) {
+        query = query.eq('location_id', _selectedLocationId!);
+      }
+
+      final response = await query;
 
       setState(() {
         _items = List<Map<String, dynamic>>.from(response);
@@ -91,16 +99,6 @@ class _AllItemsListState extends State<AllItemsList> {
               .compareTo((b['locations']?['name'] ?? '').toString());
       }
     });
-  }
-
-    Widget buildItemIcon(dynamic iconData, {double size = 40}) {
-    if (iconData is IconData) {
-      return Icon(iconData, size: size);
-    } else if (iconData is String) {
-      return Image.asset(iconData, width: size, height: size);
-    } else {
-      return Icon(Icons.help_outline, size: size); // fallback
-    }
   }
 
 
@@ -175,61 +173,76 @@ class _AllItemsListState extends State<AllItemsList> {
   }
 
   void _showQuantityDialog(Map<String, dynamic> item) {
-    int currentQuantity = item['quantity'] ?? 1;
+    int originalQuantity = item['quantity'] ?? 1;
+    int currentQuantity = originalQuantity;
 
     showDialog(
       context: context,
-      barrierDismissible: true, // tap outside to close
+      barrierDismissible: true,
       builder: (context) {
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           child: StatefulBuilder(
             builder: (context, setState) {
-              return SizedBox(
-                height: 100,
-                child: Stack(
+              return Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () {
-                              if (currentQuantity > 1) {
-                                setState(() => currentQuantity--);
-                              }
-                            },
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text('Quantity', style: TextStyle(fontSize: 16)),
-                                Text(
-                                  '$currentQuantity',
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () {
-                              setState(() => currentQuantity++);
-                            },
-                          ),
-                        ],
-                      ),
+                    // Close button row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
                     ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
+
+                    // Image centered
+                    Center(
+                      child: _buildItemImage(item),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Name + brand centered underneath
+                    Center(
+                      child: buildItemNameWithBrand(item),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Quantity controls
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () {
+                            if (currentQuantity > 0) {
+                              setState(() => currentQuantity--);
+                            }
+                          },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              const Text('Quantity', style: TextStyle(fontSize: 16)),
+                              Text(
+                                '$currentQuantity',
+                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () {
+                            setState(() => currentQuantity++);
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -239,11 +252,55 @@ class _AllItemsListState extends State<AllItemsList> {
         );
       },
     ).then((_) {
-      // Update quantity in your data source if needed here
-      // e.g. update in DB or state management
+      if (currentQuantity != originalQuantity) {
+        if (currentQuantity > 0) {
+          updateItemQuantityInDb(item['id'], currentQuantity);
+          setState(() {
+            item['quantity'] = currentQuantity;
+          });
+        } else {
+          deleteItemFromDb(item['id']);
+          setState(() {
+            _items.remove(item);
+          });
+        }
+      }
     });
   }
 
+
+  Future<void> updateItemQuantityInDb(String id, int newQuantity) async {
+    try {
+      final now = DateTime.now().toUtc().toIso8601String(); // matches timestamptz format
+      await Supabase.instance.client
+          .from('items')
+          .update({
+            'quantity': newQuantity,
+            'updated_at': now,
+          })
+          .eq('id', id);
+
+    } catch (e) {
+      debugPrint('Error updating item $id: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating item quantity. Please try again.')),
+      );    }
+  }
+
+  Future<void> deleteItemFromDb(String id) async {
+    try {
+      await Supabase.instance.client
+          .from('items')
+          .delete()
+          .eq('id', id);
+
+    } catch (e) {
+      debugPrint('Error deleting item $id: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting item. Please try again.')),
+      );
+    }
+  }
 
   Widget _buildListView() {
     return ListView.builder(
@@ -329,8 +386,11 @@ class _AllItemsListState extends State<AllItemsList> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Items'),
-        actions: [
+        title: Text(
+          _selectedLocationId == null
+              ? 'All Items'
+              : '${_selectedLocationName ?? 'Selected'} Items',
+        ),        actions: [
           IconButton(
             icon: Icon(_currentView == ViewType.list ? Icons.grid_view : Icons.list),
             onPressed: () {
@@ -361,9 +421,12 @@ class _AllItemsListState extends State<AllItemsList> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : _currentView == ViewType.list
-                  ? _buildListView()
-                  : _buildGridView(),
+              : RefreshIndicator(
+                  onRefresh: _fetchItems, // will show the loader and re-fetch
+                  child: _currentView == ViewType.list
+                      ? _buildListView()
+                      : _buildGridView(),
+                ),
     );
   }
 }

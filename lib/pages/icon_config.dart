@@ -1,19 +1,18 @@
 // icon_config.dart
 
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 final locationsIcons = [
-  'assets/icons/basement.png', 
-  'assets/icons/cellar.png',
-  'assets/icons/kitchen.png',
-  'assets/icons/pantry_0.png',
-  'assets/icons/pantry_1.png',
-  'assets/icons/pantry_2.png',
-  'assets/icons/refrigerator.png',
-  'assets/icons/storage.png',
+  'assets/locationIcons/basement.png', 
+  'assets/locationIcons/cellar.png',
+  'assets/locationIcons/kitchen.png',
+  'assets/locationIcons/pantry_0.png',
+  'assets/locationIcons/pantry_1.png',
+  'assets/locationIcons/pantry_2.png',
+  'assets/locationIcons/refrigerator.png',
+  'assets/locationIcons/storage.png',
 ];
 
 final itemsIcons = [
@@ -24,7 +23,7 @@ final itemsIcons = [
   Icons.local_pizza, 
   Symbols.nutrition, 
   Symbols.beer_meal, 
-  'assets/icons/meat.png',
+  'assets/foodIcons/meat.png',
 ];
 
 

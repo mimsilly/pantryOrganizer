@@ -5,7 +5,6 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:pantry_organizer/services/auth_services.dart';
 import 'icon_config.dart';
 
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -90,13 +89,17 @@ class _HomePageState extends State<HomePage> {
     _scaffoldKey.currentState?.openDrawer();
   }
 
-  void _goToAllItems() {
+  Future<void> _goToAllItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('selected_location_id');
+    await prefs.remove('selected_location_name');
+
     Navigator.pushNamed(context, '/all-items-list');
   }
 
   @override
   Widget build(BuildContext context) {
-    final iconSize = 70.0; 
+    final iconSize = 70.0;
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
@@ -117,7 +120,10 @@ class _HomePageState extends State<HomePage> {
               children: [
                 const DrawerHeader(
                   decoration: BoxDecoration(color: Colors.blue),
-                  child: Text('Settings', style: TextStyle(color: Colors.white, fontSize: 24)),
+                  child: Text(
+                    'Settings',
+                    style: TextStyle(color: Colors.white, fontSize: 24),
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Symbols.wifi_home),
@@ -154,82 +160,155 @@ class _HomePageState extends State<HomePage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : Column(
+          ? Center(child: Text(_error!))
+          : Stack(
+              children: [
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Padding(
                       padding: EdgeInsets.all(16.0),
                       child: Text(
                         "Your current locations",
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     Expanded(
                       child: GridView.builder(
                         padding: const EdgeInsets.all(10),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 1,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 1,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                            ),
                         itemCount: _locations.length,
                         itemBuilder: (context, index) {
                           final location = _locations[index];
-                          final iconPath = locationsIcons[location['icon_id'] ?? 0];
+                          final iconPath =
+                              locationsIcons[location['icon_id'] ?? 0];
 
-                          // Fetch stored color_id and get from availableColors
                           final colorId = location['color_id'] ?? 0;
-                          final bgColor = (colorId >= 0 && colorId < availableColors.length)
+                          final bgColor =
+                              (colorId >= 0 && colorId < availableColors.length)
                               ? availableColors[colorId]
                               : Colors.grey[200];
 
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: bgColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(iconPath, width: iconSize, height: iconSize),
-                                const SizedBox(height: 8),
-                                Text(
-                                  location['name'] ?? 'Unnamed',
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                          return InkWell(
+                            onTap: () async {
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              await prefs.setString(
+                                'selected_location_id',
+                                location['id'],
+                              );
+                              await prefs.setString(
+                                'selected_location_name',
+                                location['name'] ?? '',
+                              );
+
+                              if (!context.mounted) return;
+                              Navigator.pushNamed(context, '/all-items-list');
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: bgColor,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Image.asset(
+                                    iconPath,
+                                    width: iconSize,
+                                    height: iconSize,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    location['name'] ?? 'Unnamed',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: SizedBox(
+                    const SizedBox(
+                      height: 100,
+                    ), // leave space for floating button
+                  ],
+                ),
+
+                // Add Item button with text
+                Positioned(
+                  bottom: 120, // adjust vertical position above bottom buttons
+                  left: 0,
+                  right: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/create-item');
+                        },
+                        backgroundColor: const Color.fromARGB(
+                          255,
+                          159,
+                          221,
+                          161,
+                        ),
+                        child: const Icon(Icons.add, size: 32),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        "Add Item",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color.fromARGB(255, 159, 221, 161),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 30), // leave space for floating button
+                // Bottom buttons
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  child: Column(
+                    children: [
+                      SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: _goToAllItems,
                           child: const Text('Show All Items'),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: SizedBox(
+                      const SizedBox(height: 8),
+                      SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: _goToCreateLocation,
                           child: const Text('Create Location'),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                    ],
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }
