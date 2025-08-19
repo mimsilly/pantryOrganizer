@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -65,8 +66,9 @@ class _AllItemsListState extends State<AllItemsList> {
 
       var query = Supabase.instance.client
           .from('items')
-          .select('id, name, quantity, unit, brand,expiration_date, image_url, icon_id, locations(color_id, name)')
-          .eq('household_id', householdId);
+          .select('id, name, quantity, unit, brand, expiration_date, image_url, icon_id, locations(color_id, name)')
+          .eq('household_id', householdId)
+          .gt('quantity', 0);  // ✅ only fetch items with quantity > 0
 
       if (_selectedLocationId != null) {
         query = query.eq('location_id', _selectedLocationId!);
@@ -154,23 +156,7 @@ class _AllItemsListState extends State<AllItemsList> {
   }
 
 
-  Widget buildItemRow(Map<String, dynamic> item) {
-    return InkWell(
-      onTap: () => _showQuantityDialog(item),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(child: buildItemNameWithBrand(item)),
-            Text(
-              '${item['quantity']}x',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   void _showQuantityDialog(Map<String, dynamic> item) {
     int originalQuantity = item['quantity'] ?? 1;
@@ -252,20 +238,17 @@ class _AllItemsListState extends State<AllItemsList> {
         );
       },
     ).then((_) {
-      if (currentQuantity != originalQuantity) {
-        if (currentQuantity > 0) {
+        if (currentQuantity != originalQuantity) {
           updateItemQuantityInDb(item['id'], currentQuantity);
           setState(() {
             item['quantity'] = currentQuantity;
-          });
-        } else {
-          deleteItemFromDb(item['id']);
-          setState(() {
-            _items.remove(item);
+            if (currentQuantity == 0) {
+              // Optionally hide it locally so UI matches DB filter
+              _items.remove(item);
+            }
           });
         }
-      }
-    });
+      });
   }
 
 
@@ -287,20 +270,6 @@ class _AllItemsListState extends State<AllItemsList> {
       );    }
   }
 
-  Future<void> deleteItemFromDb(String id) async {
-    try {
-      await Supabase.instance.client
-          .from('items')
-          .delete()
-          .eq('id', id);
-
-    } catch (e) {
-      debugPrint('Error deleting item $id: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting item. Please try again.')),
-      );
-    }
-  }
 
   Widget _buildListView() {
     return ListView.builder(
@@ -370,7 +339,14 @@ class _AllItemsListState extends State<AllItemsList> {
             children: [
               _buildItemImage(item),
               const SizedBox(height: 6),
-              buildItemNameWithBrand(item),
+              AutoSizeText(
+              '${item['name'] ?? 'Unnamed'}${item['brand'] != null ? ' - ${item['brand']}' : ''}',
+              style: const TextStyle(fontSize: 16),
+              maxLines: 2,   // allow wrapping onto 2 lines
+              minFontSize: 10,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              ),
               Text(
                 '${item['quantity'] ?? '-'}x ${item['unit'] ?? ''}',
                 style: const TextStyle(fontSize: 12, color: Colors.black54),

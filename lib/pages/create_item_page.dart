@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'icon_config.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -31,7 +32,7 @@ Widget buildItemIcon(dynamic iconData, {double size = 40}) {
 }
 
 class CreateItemScreen extends StatefulWidget {
-  const CreateItemScreen({Key? key}) : super(key: key);
+  const CreateItemScreen({super.key});
 
   @override
   State<CreateItemScreen> createState() => _CreateItemScreenState();
@@ -81,6 +82,45 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
       });
     }
   }
+
+  Future<void> _pickRecentlyDeleted() async {
+    // Push the RecentlyDeletedItems page and wait for a Map<String, dynamic>
+    final deletedItem = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => RecentlyDeletedItemsPage()),
+    );
+
+    if (deletedItem != null) {
+      setState(() {
+        _nameController.text = deletedItem['name'] ?? '';
+        _brandController.text = deletedItem['brand'] ?? '';
+        _quantityController.text = '${deletedItem['quantity'] ?? 1}';
+        //_unitNumberController.text = '${deletedItem['value'] ?? ''}';
+        //_selectedUnit = deletedItem['unit'] ?? _selectedUnit;
+
+        // Restore icon if present
+        if (deletedItem['icon'] != null) {
+          if (_displayedIcons.length == itemsIcons.length) {
+            _displayedIcons.add(deletedItem['icon']);
+          } else {
+            _displayedIcons[_displayedIcons.length - 1] = deletedItem['icon'];
+          }
+          _selectedIcon = _displayedIcons.length - 1;
+        }
+
+        // Restore location if available
+        if (deletedItem['location_id'] != null) {
+          _selectedLocation = deletedItem['location_id'];
+        }
+
+        // Restore expiration if available
+        if (deletedItem['expiry'] != null && deletedItem['expiry'] is DateTime) {
+          _expiryDate = deletedItem['expiry'];
+        }
+      });
+    }
+  }
+
 
   Future<void> _scanBarcode() async {
     final barcode = await Navigator.push<String>(
@@ -223,7 +263,7 @@ Future<void> _saveItem() async {
                 DropdownButton<String>(
                   value: _selectedUnit,
                   hint: const Text('Unit'),
-                  items: units.map((e) => DropdownMenuItem(child: Text(e), value: e)).toList(),
+                  items: units.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setState(() => _selectedUnit = v),
                 ),
               ],
@@ -322,11 +362,21 @@ Future<void> _saveItem() async {
               ],
             ),
 
-            // Barcode scanner
-            ElevatedButton.icon(
-              onPressed: _scanBarcode,
-              icon: const Icon(Icons.qr_code),
-              label: const Text('Scan Barcode'),
+            // Barcode scanner + Recently deleted
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _scanBarcode,
+                  icon: const Icon(Icons.qr_code),
+                  label: const Text('Scan Barcode'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _pickRecentlyDeleted,
+                  icon: const Icon(Icons.auto_delete),
+                  label: const Text('Recently Deleted'),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
 
@@ -417,5 +467,154 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+}
+
+
+
+const double imageIconSize = 60;
+
+class RecentlyDeletedItemsPage extends StatefulWidget {
+  const RecentlyDeletedItemsPage({super.key});
+
+  @override
+  State<RecentlyDeletedItemsPage> createState() => _RecentlyDeletedItemsPageState();
+}
+
+class _RecentlyDeletedItemsPageState extends State<RecentlyDeletedItemsPage> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDeletedItems();
+  }
+
+  Future<void> _fetchDeletedItems() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final householdId = prefs.getString('selected_household_id');
+
+      if (householdId == null) {
+        setState(() {
+          _error = 'No household selected.';
+          _loading = false;
+        });
+        return;
+      }
+
+      // ✅ Fetch items with quantity = 0 (deleted ones)
+      final response = await Supabase.instance.client
+          .from('items')
+          .select('id, name, quantity, unit, brand, icon_id, image_url, location_id, expiration_date, updated_at')
+          .eq('household_id', householdId)
+          .eq('quantity', 0);
+
+      setState(() {
+        _items = List<Map<String, dynamic>>.from(response);
+
+        // Sort by latest updated_at (descending)
+        _items.sort((a, b) {
+          final aDate = DateTime.tryParse(a['updated_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = DateTime.tryParse(b['updated_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
+
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Error loading deleted items: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Widget _buildItemImage(Map<String, dynamic> item) {
+    if (item['image_url'] != null && item['image_url'].toString().isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: item['image_url'],
+        width: imageIconSize,
+        height: imageIconSize,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => const CircularProgressIndicator(),
+        errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: imageIconSize),
+      );
+    } else if (item['icon_id'] != null &&
+        item['icon_id'] is int &&
+        item['icon_id'] < itemsIcons.length) {
+      final iconData = itemsIcons[item['icon_id']];
+      if (iconData is IconData) {
+        return Icon(iconData, size: imageIconSize);
+      } else if (iconData is String) {
+        return Image.asset(iconData, width: imageIconSize, height: imageIconSize);
+      }
+    }
+    return const Icon(Icons.help_outline, size: imageIconSize);
+  }
+
+  Widget _buildListView() {
+    return ListView.builder(
+      itemCount: _items.length,
+      itemBuilder: (context, index) {
+        final item = _items[index];
+        final updatedAt = DateTime.tryParse(item['updated_at'] ?? '');
+        final deletedText = updatedAt != null
+            ? 'Deleted: ${DateFormat('dd/MM/yy').format(updatedAt.toLocal())}'
+            : 'Deleted: Unknown';
+
+        return InkWell(
+          onTap: () {
+            Navigator.pop(context, item); // ✅ Return item to caller
+          },
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            child: ListTile(
+              leading: _buildItemImage(item),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item['name'] ?? 'Unnamed'}'
+                      '${item['brand'] != null ? ' - ${item['brand']}' : ''}',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      deletedText,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Recently Deleted")),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : RefreshIndicator(
+                  onRefresh: _fetchDeletedItems,
+                  child: _buildListView(),
+                ),
+    );
   }
 }

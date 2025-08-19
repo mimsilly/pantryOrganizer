@@ -43,6 +43,7 @@ class _HomePageState extends State<HomePage> {
           .select()
           .eq('household_id', householdId);
 
+      if (!mounted) return;
       setState(() {
         _locations = List<Map<String, dynamic>>.from(response);
         _loading = false;
