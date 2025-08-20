@@ -16,14 +16,28 @@ final locationsIcons = [
 ];
 
 final itemsIcons = [
-  Icons.bakery_dining, 
-  Icons.cookie, 
-  Icons.cake, 
-  Icons.icecream, 
-  Icons.local_pizza, 
-  Symbols.nutrition, 
-  Symbols.beer_meal, 
+  'assets/foodIcons/pasta.png',
+  'assets/foodIcons/rice.png',
+  'assets/foodIcons/wheat.png',
+  'assets/foodIcons/canned-food.png',
+  'assets/foodIcons/glass-bottle.png',
+  'assets/foodIcons/lentils.png',
+  'assets/foodIcons/spices.png',
+  'assets/foodIcons/cereal.png',
+  'assets/foodIcons/bread.png',
+  'assets/foodIcons/honeyjam.png',
+  'assets/foodIcons/cookie.png',
+  'assets/foodIcons/chips.png',
+  'assets/foodIcons/fruit.png',
+  'assets/foodIcons/vegetable.png',
   'assets/foodIcons/meat.png',
+  'assets/foodIcons/ready-meal.png',
+  'assets/foodIcons/pizza.png',
+  'assets/foodIcons/popsicle.png',
+  'assets/foodIcons/sweets.png',
+  'assets/foodIcons/water-bottle.png',
+  'assets/foodIcons/beer.png',
+    Symbols.egg, 
 ];
 
 
