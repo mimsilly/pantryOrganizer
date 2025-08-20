@@ -1,6 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:pantry_organizer/pages/edit_item_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'icon_config.dart';
@@ -66,7 +67,7 @@ class _AllItemsListState extends State<AllItemsList> {
 
       var query = Supabase.instance.client
           .from('items')
-          .select('id, name, quantity, unit, brand, expiration_date, image_url, icon_id, locations(color_id, name)')
+          .select('id, name, quantity, location_id, unit_value, unit_text, brand, expiration_date, image_url, icon_id, locations(color_id, name)')
           .eq('household_id', householdId)
           .gt('quantity', 0);  // ✅ only fetch items with quantity > 0
 
@@ -133,29 +134,6 @@ class _AllItemsListState extends State<AllItemsList> {
     }
   }
 
-  Widget buildItemNameWithBrand(Map<String, dynamic> item) {
-    final name = item['name'] ?? 'Unnamed';
-    final brand = item['brand'] ?? '';
-
-    if (brand.isEmpty) {
-      return Text(name, style: const TextStyle(fontSize: 16));
-    } else {
-      return Text.rich(
-        TextSpan(
-          text: name,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
-          children: [
-            TextSpan(
-              text: ' - $brand',
-              style: const TextStyle(fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-
 
 
   void _showQuantityDialog(Map<String, dynamic> item) {
@@ -175,10 +153,21 @@ class _AllItemsListState extends State<AllItemsList> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Close button row
+                    // Top row: edit (left) + close (right)
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () {
+                            Navigator.of(context).pop(); // close dialog
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => EditItemScreen(item: item),
+                              ),
+                            );
+                          },
+                        ),
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: () => Navigator.of(context).pop(),
@@ -278,14 +267,19 @@ class _AllItemsListState extends State<AllItemsList> {
         final item = _items[index];
         final colorId = item['locations']?['color_id'] ?? 0;
         final bgColor = (colorId >= 0 && colorId < availableColors.length)
-            ? availableColors[colorId] // lighter background
-            : Colors.grey;
+            ? availableColors[colorId]
+            : Colors.grey[200];
 
-        return InkWell(
-          onTap: () => _showQuantityDialog(item),
-          child: Container(
-            color: bgColor,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16), // add some padding
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // space between cards
+          color: bgColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12), // round corners
+          ),
+          elevation: 3, // subtle shadow
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showQuantityDialog(item),
             child: ListTile(
               leading: _buildItemImage(item),
               title: Row(
@@ -295,13 +289,18 @@ class _AllItemsListState extends State<AllItemsList> {
                     padding: const EdgeInsets.only(left: 12),
                     child: Text(
                       '${item['quantity'] ?? '-'}x',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ],
               ),
               subtitle: Text(
-                '${item['unit'] ?? ''} | Exp: ${item['expiration_date'] ?? '-'} | ${item['locations']?['name'] ?? ''}',
+                '${item['unit_value'] ?? ''}${item['unit_text'] ?? ''} | '
+                'Exp: ${item['expiration_date'] ?? '-'} | '
+                '${item['locations']?['name'] ?? ''}',
               ),
             ),
           ),
@@ -309,7 +308,6 @@ class _AllItemsListState extends State<AllItemsList> {
       },
     );
   }
-
 
 
   Widget _buildGridView() {
@@ -329,34 +327,44 @@ class _AllItemsListState extends State<AllItemsList> {
             ? availableColors[colorId]
             : Colors.grey[200];
 
-        return Container(
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(8),
+        return Card(
+          color: bgColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildItemImage(item),
-              const SizedBox(height: 6),
-              AutoSizeText(
-              '${item['name'] ?? 'Unnamed'}${item['brand'] != null ? ' - ${item['brand']}' : ''}',
-              style: const TextStyle(fontSize: 16),
-              maxLines: 2,   // allow wrapping onto 2 lines
-              minFontSize: 10,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+          elevation: 3, // subtle shadow
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showQuantityDialog(item),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0), // small inner padding
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildItemImage(item),
+                  const SizedBox(height: 6),
+                  AutoSizeText(
+                    '${item['name'] ?? 'Unnamed'}${item['brand'] != null ? ' - ${item['brand']}' : ''}',
+                    style: const TextStyle(fontSize: 16),
+                    maxLines: 3,
+                    minFontSize: 10,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item['quantity'] ?? '-'}x ${item['unit_value'] ?? ''}${item['unit_text'] ?? ''}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
               ),
-              Text(
-                '${item['quantity'] ?? '-'}x ${item['unit'] ?? ''}',
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-            ],
+            ),
           ),
         );
       },
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

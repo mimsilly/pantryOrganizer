@@ -42,18 +42,20 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
-  final _unitNumberController = TextEditingController();
+  final _unitValueController = TextEditingController();
   DateTime? _expiryDate;
 
   int? _selectedIcon;
-  String? _selectedUnit;
+  String? _selectedUnitText;
+
+  String? _recentlyDeletedID;
 
   String? _selectedLocation;
   List<Map<String, dynamic>> _locations = [];
   final List<dynamic> _displayedIcons = [...itemsIcons];
   bool _loadingLocations = true;
 
-  final List<String> units = ['g', 'kg', 'ml', 'l', 'pcs'];
+  final List<String> unitsTextList = ['g', 'kg', 'ml', 'l', 'pcs'];
 
   @override
   void initState() {
@@ -91,22 +93,28 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     );
 
     if (deletedItem != null) {
+
+      _recentlyDeletedID = deletedItem["id"];
+
       setState(() {
         _nameController.text = deletedItem['name'] ?? '';
         _brandController.text = deletedItem['brand'] ?? '';
-        _quantityController.text = '${deletedItem['quantity'] ?? 1}';
-        //_unitNumberController.text = '${deletedItem['value'] ?? ''}';
-        //_selectedUnit = deletedItem['unit'] ?? _selectedUnit;
+        _quantityController.text = '1';
+        _unitValueController.text = '${deletedItem['unit_value'] ?? ''}';
+        _updateUnitFromApi(deletedItem['unit_text']);
 
         // Restore icon if present
-        if (deletedItem['icon'] != null) {
-          if (_displayedIcons.length == itemsIcons.length) {
-            _displayedIcons.add(deletedItem['icon']);
+        if (deletedItem['image_url'] != null){
+          if(_displayedIcons.length == itemsIcons.length) {
+            _displayedIcons.add(deletedItem['image_url']);
           } else {
-            _displayedIcons[_displayedIcons.length - 1] = deletedItem['icon'];
+            _displayedIcons[_displayedIcons.length -1] = deletedItem['image_url'];
           }
-          _selectedIcon = _displayedIcons.length - 1;
+        _selectedIcon = _displayedIcons.length - 1;}
+        else if(deletedItem['icon_id'] != null){
+        _selectedIcon = deletedItem['icon_id'];
         }
+
 
         // Restore location if available
         if (deletedItem['location_id'] != null) {
@@ -133,9 +141,8 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
         setState(() {
           _nameController.text = data['product_name'] ?? '';
           _brandController.text = data['brands'] ?? '';
-          _unitNumberController.text = data['quantity'] ?? '';
-          final unitFromApi = data['product_quantity_unit'] ?? '';
-          _updateUnitFromApi(unitFromApi);
+          _unitValueController.text = data['quantity'] ?? '';
+          _updateUnitFromApi(data['product_quantity_unit'] ?? '');
           if (data['image_url'] != null){
             if(_displayedIcons.length == itemsIcons.length) {
               _displayedIcons.add(data['image_url']);
@@ -161,11 +168,11 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   void _updateUnitFromApi(String unitFromApi) {
   setState(() {
     // Add the unit to the list if it's not already there
-    if (unitFromApi.isNotEmpty && !units.contains(unitFromApi)) {
-      units.add(unitFromApi);
+    if (unitFromApi.isNotEmpty && !unitsTextList.contains(unitFromApi)) {
+      unitsTextList.add(unitFromApi);
     }
     // Set the dropdown selected value
-    _selectedUnit = units.contains(unitFromApi) ? unitFromApi : null;
+    _selectedUnitText = unitsTextList.contains(unitFromApi) ? unitFromApi : null;
   });
 }
 
@@ -173,7 +180,6 @@ Future<void> _saveItem() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final householdId = prefs.getString('selected_household_id');
-    final valueWithUnit = '${_unitNumberController.text}${_selectedUnit ?? ''}';
 
     if (householdId == null || _selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,25 +188,57 @@ Future<void> _saveItem() async {
       return;
     }
 
-      if (_nameController.text == "") {
+    if (_nameController.text == "") {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a name.')),
       );
       return;
     }
 
-    await Supabase.instance.client.from('items').insert({
+    if (_quantityController.text == "0") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a quantity.')),
+      );
+      return;
+    }
+
+
+    if(_recentlyDeletedID != null){
+
+      await Supabase.instance.client.from('items').update({
       'household_id': householdId,
       'location_id': _selectedLocation,
       'name': _nameController.text,
       'brand': _brandController.text,
       'quantity': int.tryParse(_quantityController.text) ?? 1,
-      'unit': valueWithUnit,
+      'unit_value': _unitValueController.text,
+      'unit_text': _selectedUnitText,
       'expiration_date': _expiryDate?.toIso8601String(),
       'icon_id': _selectedIcon,
-      'image_url': (_selectedIcon != null && _displayedIcons[_selectedIcon!] is String) 
+      'image_url': (_selectedIcon != null && 
+                  _displayedIcons[_selectedIcon!] is String && 
+                  _displayedIcons[_selectedIcon!].startsWith('http')) 
+          ? _displayedIcons[_selectedIcon!] 
+          : null,
+      }).eq('id', _recentlyDeletedID!);
+
+      _recentlyDeletedID = null; // reset after update
+
+    } else {
+      await Supabase.instance.client.from('items').insert({
+      'household_id': householdId,
+      'location_id': _selectedLocation,
+      'name': _nameController.text,
+      'brand': _brandController.text,
+      'quantity': int.tryParse(_quantityController.text) ?? 1,
+      'unit_value': _unitValueController.text,
+      'unit_text':_selectedUnitText,
+      'expiration_date': _expiryDate?.toIso8601String(),
+      'icon_id': _selectedIcon,
+      'image_url': (_selectedIcon != null && _displayedIcons[_selectedIcon!] is String && _displayedIcons[_selectedIcon!].startsWith('http')) 
           ? _displayedIcons[_selectedIcon!] 
           : null,    });
+    }
 
     Navigator.pop(context);
   } catch (e) {
@@ -208,7 +246,6 @@ Future<void> _saveItem() async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Error saving item: $e')),
     );
-    debugPrint('Error saving item: $e');
   }
 }
 
@@ -254,17 +291,17 @@ Future<void> _saveItem() async {
                 SizedBox(
                   width: 60,
                   child: TextField(
-                    controller: _unitNumberController, // separate controller for the number
+                    controller: _unitValueController, // separate controller for the number
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Value'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 DropdownButton<String>(
-                  value: _selectedUnit,
+                  value: _selectedUnitText,
                   hint: const Text('Unit'),
-                  items: units.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) => setState(() => _selectedUnit = v),
+                  items: unitsTextList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setState(() => _selectedUnitText = v),
                 ),
               ],
             ),
@@ -508,7 +545,8 @@ class _RecentlyDeletedItemsPageState extends State<RecentlyDeletedItemsPage> {
       // ✅ Fetch items with quantity = 0 (deleted ones)
       final response = await Supabase.instance.client
           .from('items')
-          .select('id, name, quantity, unit, brand, icon_id, image_url, location_id, expiration_date, updated_at')
+          .select(
+              'id, name, quantity, unit_value, unit_text, brand, icon_id, image_url, location_id, expiration_date, updated_at, locations(color_id, name)')
           .eq('household_id', householdId)
           .eq('quantity', 0);
 
@@ -517,8 +555,10 @@ class _RecentlyDeletedItemsPageState extends State<RecentlyDeletedItemsPage> {
 
         // Sort by latest updated_at (descending)
         _items.sort((a, b) {
-          final aDate = DateTime.tryParse(a['updated_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bDate = DateTime.tryParse(b['updated_at'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final aDate = DateTime.tryParse(a['updated_at'] ?? '') ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = DateTime.tryParse(b['updated_at'] ?? '') ??
+              DateTime.fromMillisecondsSinceEpoch(0);
           return bDate.compareTo(aDate);
         });
 
@@ -540,7 +580,8 @@ class _RecentlyDeletedItemsPageState extends State<RecentlyDeletedItemsPage> {
         height: imageIconSize,
         fit: BoxFit.contain,
         placeholder: (context, url) => const CircularProgressIndicator(),
-        errorWidget: (context, url, error) => const Icon(Icons.broken_image, size: imageIconSize),
+        errorWidget: (context, url, error) =>
+            const Icon(Icons.broken_image, size: imageIconSize),
       );
     } else if (item['icon_id'] != null &&
         item['icon_id'] is int &&
@@ -555,36 +596,160 @@ class _RecentlyDeletedItemsPageState extends State<RecentlyDeletedItemsPage> {
     return const Icon(Icons.help_outline, size: imageIconSize);
   }
 
+  Future<void> _showQuantityDialog(Map<String, dynamic> item) async {
+    int currentQuantity = item['quantity'] ?? 1;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Top row: edit (left) + close (right)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () {
+                            Navigator.of(context).pop(); // close dialog
+                            Navigator.pop(context, item); // ✅ Return to caller (edit item)
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                    // Image centered
+                    Center(child: _buildItemImage(item)),
+                    const SizedBox(height: 8),
+                    // Name + brand centered underneath
+                    Center(child: buildItemNameWithBrand(item)),
+                    const SizedBox(height: 16),
+                    // Quantity controls
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () {
+                            if (currentQuantity > 0) {
+                              setState(() => currentQuantity--);
+                            }
+                          },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              const Text('Quantity', style: TextStyle(fontSize: 16)),
+                              Text(
+                                '$currentQuantity',
+                                style: const TextStyle(
+                                    fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () {
+                            setState(() => currentQuantity++);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Restock button
+                    ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          await Supabase.instance.client
+                              .from('items')
+                              .update({'quantity': currentQuantity})
+                              .eq('id', item['id']);
+
+                          Navigator.of(context).pop(); // close dialog
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                          Navigator.pushReplacementNamed(context, '/home');
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error restocking item: $e')),
+                          );
+                        }
+                      },
+                      child: const Text('Restock Item'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildListView() {
     return ListView.builder(
       itemCount: _items.length,
       itemBuilder: (context, index) {
         final item = _items[index];
+
+        // Determine background color from location
+        final colorId = item['locations']?['color_id'] ?? 0;
+        final bgColor = (colorId >= 0 && colorId < availableColors.length)
+            ? availableColors[colorId]
+            : Colors.grey[200];
+
+        // Format deleted date
         final updatedAt = DateTime.tryParse(item['updated_at'] ?? '');
         final deletedText = updatedAt != null
             ? 'Deleted: ${DateFormat('dd/MM/yy').format(updatedAt.toLocal())}'
             : 'Deleted: Unknown';
 
-        return InkWell(
-          onTap: () {
-            Navigator.pop(context, item); // ✅ Return item to caller
-          },
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            child: ListTile(
-              leading: _buildItemImage(item),
-              title: Row(
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          color: bgColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 3,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showQuantityDialog(item),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center, // vertically center everything
                 children: [
+                  _buildItemImage(item),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      '${item['name'] ?? 'Unnamed'}'
-                      '${item['brand'] != null ? ' - ${item['brand']}' : ''}',
-                      style: const TextStyle(fontSize: 16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center, // vertical center
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        buildItemNameWithBrand(item),
+                        const SizedBox(height: 4),
+                        Text(
+                          item['locations']?['name'] ?? 'Unknown location',
+                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      ],
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 12),
+                    padding: const EdgeInsets.only(left: 8.0),
                     child: Text(
                       deletedText,
                       style: const TextStyle(

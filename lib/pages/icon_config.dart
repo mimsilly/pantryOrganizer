@@ -39,3 +39,26 @@ final List<Color> availableColors = [
   const Color(0xFFEFA6AA), // strawberry
 
 ];
+
+
+  Widget buildItemNameWithBrand(Map<String, dynamic> item) {
+    final name = item['name'] ?? 'Unnamed';
+    final brand = item['brand'] ?? '';
+
+    if (brand.isEmpty) {
+      return Text(name, style: const TextStyle(fontSize: 16));
+    } else {
+      return Text.rich(
+        TextSpan(
+          text: name,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
+          children: [
+            TextSpan(
+              text: ' - $brand',
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+      );
+    }
+  }
