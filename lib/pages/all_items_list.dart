@@ -96,7 +96,9 @@ class _AllItemsListState extends State<AllItemsList> {
         case SortBy.name:
           return (a['name'] ?? '').toString().compareTo((b['name'] ?? '').toString());
         case SortBy.expiration:
-          return (a['expiration'] ?? '').toString().compareTo((b['expiration'] ?? '').toString());
+          final aDate = DateTime.tryParse(a['expiration_date'] ?? '') ?? DateTime(2100);
+          final bDate = DateTime.tryParse(b['expiration_date'] ?? '') ?? DateTime(2100);
+          return aDate.compareTo(bDate);
         case SortBy.location:
           return (a['locations']?['name'] ?? '').toString()
               .compareTo((b['locations']?['name'] ?? '').toString());
@@ -342,16 +344,16 @@ class _AllItemsListState extends State<AllItemsList> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildItemImage(item),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 2),
                   AutoSizeText(
                     '${item['name'] ?? 'Unnamed'}${item['brand'] != null ? ' - ${item['brand']}' : ''}',
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 14),
                     maxLines: 3,
-                    minFontSize: 10,
+                    minFontSize: 8,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     '${item['quantity'] ?? '-'}x ${item['unit_value'] ?? ''}${item['unit_text'] ?? ''}',
                     style: const TextStyle(fontSize: 12, color: Colors.black54),

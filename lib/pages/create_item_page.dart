@@ -129,6 +129,12 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     }
   }
 
+  // Extract only digits from the API result
+  String sanitizeQuantity(String? raw) {
+    if (raw == null) return '';
+    final numericOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    return numericOnly;
+  }
 
   Future<void> _scanBarcode() async {
     final barcode = await Navigator.push<String>(
@@ -138,21 +144,27 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     if (barcode != null) {
       final data = await _fetchFoodFacts(barcode);
       if (data != null) {
-        setState(() {
-          _nameController.text = data['product_name'] ?? '';
-          _brandController.text = data['brands'] ?? '';
-          _unitValueController.text = data['quantity'] ?? '';
-          _updateUnitFromApi(data['product_quantity_unit'] ?? '');
-          if (data['image_url'] != null){
-            if(_displayedIcons.length == itemsIcons.length) {
-              _displayedIcons.add(data['image_url']);
-            } else {
-              _displayedIcons[_displayedIcons.length -1] = data['image_url'];
-            }
-          _selectedIcon = _displayedIcons.length - 1;}
-        });
+        if(data['product_name'] != null){
+          setState(() {
+            _nameController.text = data['product_name'] ?? '';
+            _brandController.text = data['brands'] ?? '';
+            _unitValueController.text = sanitizeQuantity(data['quantity']);
+            _updateUnitFromApi(data['product_quantity_unit'] ?? '');
+            if (data['image_url'] != null){
+              if(_displayedIcons.length == itemsIcons.length) {
+                _displayedIcons.add(data['image_url']);
+              } else {
+                _displayedIcons[_displayedIcons.length -1] = data['image_url'];
+              }
+            _selectedIcon = _displayedIcons.length - 1;}
+          });
+          return;
+        }
       }
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(content: const Text('Unknown Item, please enter information manually')),
+      );
   }
 
   Future<Map<String, dynamic>?> _fetchFoodFacts(String barcode) async {
@@ -166,265 +178,306 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   }
 
   void _updateUnitFromApi(String unitFromApi) {
-  setState(() {
-    // Add the unit to the list if it's not already there
-    if (unitFromApi.isNotEmpty && !unitsTextList.contains(unitFromApi)) {
-      unitsTextList.add(unitFromApi);
-    }
-    // Set the dropdown selected value
-    _selectedUnitText = unitsTextList.contains(unitFromApi) ? unitFromApi : null;
-  });
-}
-
-Future<void> _saveItem() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final householdId = prefs.getString('selected_household_id');
-
-    if (householdId == null || _selectedLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location.')),
-      );
-      return;
-    }
-
-    if (_nameController.text == "") {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a name.')),
-      );
-      return;
-    }
-
-    if (_quantityController.text == "0") {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a quantity.')),
-      );
-      return;
-    }
-
-
-    if(_recentlyDeletedID != null){
-
-      await Supabase.instance.client.from('items').update({
-      'household_id': householdId,
-      'location_id': _selectedLocation,
-      'name': _nameController.text,
-      'brand': _brandController.text,
-      'quantity': int.tryParse(_quantityController.text) ?? 1,
-      'unit_value': _unitValueController.text,
-      'unit_text': _selectedUnitText,
-      'expiration_date': _expiryDate?.toIso8601String(),
-      'icon_id': _selectedIcon,
-      'image_url': (_selectedIcon != null && 
-                  _displayedIcons[_selectedIcon!] is String && 
-                  _displayedIcons[_selectedIcon!].startsWith('http')) 
-          ? _displayedIcons[_selectedIcon!] 
-          : null,
-      }).eq('id', _recentlyDeletedID!);
-
-      _recentlyDeletedID = null; // reset after update
-
-    } else {
-      await Supabase.instance.client.from('items').insert({
-      'household_id': householdId,
-      'location_id': _selectedLocation,
-      'name': _nameController.text,
-      'brand': _brandController.text,
-      'quantity': int.tryParse(_quantityController.text) ?? 1,
-      'unit_value': _unitValueController.text,
-      'unit_text':_selectedUnitText,
-      'expiration_date': _expiryDate?.toIso8601String(),
-      'icon_id': _selectedIcon,
-      'image_url': (_selectedIcon != null && _displayedIcons[_selectedIcon!] is String && _displayedIcons[_selectedIcon!].startsWith('http')) 
-          ? _displayedIcons[_selectedIcon!] 
-          : null,    });
-    }
-
-    Navigator.pop(context);
-  } catch (e) {
-    // Show the error on screen but don't close the screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error saving item: $e')),
-    );
+    setState(() {
+      // Add the unit to the list if it's not already there
+      if (unitFromApi.isNotEmpty && !unitsTextList.contains(unitFromApi)) {
+        unitsTextList.add(unitFromApi);
+      }
+      // Set the dropdown selected value
+      _selectedUnitText = unitsTextList.contains(unitFromApi) ? unitFromApi : null;
+    });
   }
-}
+
+  void resetTextFields(){
+    _nameController.text = '';
+    _brandController.text = '';
+    _unitValueController.text = '';
+    _quantityController.text = '1';
+    if(_displayedIcons.length != itemsIcons.length) {
+      _displayedIcons.removeLast();
+    }
+    setState(() {_selectedIcon = null;
+    _expiryDate = null;
+    _selectedUnitText = null;});
+  }
+
+  Future<void> _saveItemAndLeave() async {
+    bool success = await _saveItemInDB();
+    if(success){
+      Navigator.pop(context);
+    }
+  }
+  Future<void> _saveAndContinueAdding() async {
+    bool success = await _saveItemInDB();
+    if(success){
+      resetTextFields();
+    }
+  }
+
+  Future<bool> _saveItemInDB() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final householdId = prefs.getString('selected_household_id');
+
+      if (householdId == null || _selectedLocation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a location.')),
+        );
+        return false;
+      }
+
+      if (_nameController.text == "") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a name.')),
+        );
+        return false;
+      }
+
+      if (_quantityController.text == "0") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a quantity.')),
+        );
+        return false;
+      }
+
+
+      if(_recentlyDeletedID != null){
+
+        await Supabase.instance.client.from('items').update({
+        'household_id': householdId,
+        'location_id': _selectedLocation,
+        'name': _nameController.text,
+        'brand': _brandController.text,
+        'quantity': int.tryParse(_quantityController.text) ?? 1,
+        'unit_value': _unitValueController.text,
+        'unit_text': _selectedUnitText,
+        'expiration_date': _expiryDate?.toIso8601String(),
+        'icon_id': _selectedIcon,
+        'image_url': (_selectedIcon != null && 
+                    _displayedIcons[_selectedIcon!] is String && 
+                    _displayedIcons[_selectedIcon!].startsWith('http')) 
+            ? _displayedIcons[_selectedIcon!] 
+            : null,
+        }).eq('id', _recentlyDeletedID!);
+
+        _recentlyDeletedID = null; // reset after update
+
+      } else {
+        await Supabase.instance.client.from('items').insert({
+        'household_id': householdId,
+        'location_id': _selectedLocation,
+        'name': _nameController.text,
+        'brand': _brandController.text,
+        'quantity': int.tryParse(_quantityController.text) ?? 1,
+        'unit_value': _unitValueController.text,
+        'unit_text':_selectedUnitText,
+        'expiration_date': _expiryDate?.toIso8601String(),
+        'icon_id': _selectedIcon,
+        'image_url': (_selectedIcon != null && _displayedIcons[_selectedIcon!] is String && _displayedIcons[_selectedIcon!].startsWith('http')) 
+            ? _displayedIcons[_selectedIcon!] 
+            : null,    });
+      }
+      return true;
+
+    } catch (e) {
+      // Show the error on screen but don't close the screen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving item: $e')),
+      );
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create Item')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Name & Brand
-            Row(
-              children: [
-                Expanded(child: TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Name'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _brandController, decoration: const InputDecoration(labelText: 'Brand'))),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Quantity & Unit
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove),
-                  onPressed: () {
-                    int current = int.tryParse(_quantityController.text) ?? 1;
-                    if (current > 1) _quantityController.text = '${current - 1}';
-                    setState(() {});
-                  },
-                ),
-                SizedBox(width: 50, child: TextField(controller: _quantityController, textAlign: TextAlign.center)),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
-                    int current = int.tryParse(_quantityController.text) ?? 1;
-                    _quantityController.text = '${current + 1}';
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 60,
-                  child: TextField(
-                    controller: _unitValueController, // separate controller for the number
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Value'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                DropdownButton<String>(
-                  value: _selectedUnitText,
-                  hint: const Text('Unit'),
-                  items: unitsTextList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) => setState(() => _selectedUnitText = v),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Icons
-            Wrap(
-              spacing: 10,
-              children: List.generate(_displayedIcons.length, (index) {
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedIcon = index),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: _selectedIcon == index ? Colors.blue : Colors.transparent, width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: buildItemIcon(_displayedIcons[index], size: 40),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 20),
-
-            // Locations
-            if (_loadingLocations) const CircularProgressIndicator(),
-            if (!_loadingLocations)
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
+    return 
+    GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent, // so empty space also counts
+      child:
+      Scaffold(
+        appBar: AppBar(title: const Text('Create Item')),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // Name & Brand
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Name'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(controller: _brandController, decoration: const InputDecoration(labelText: 'Brand'))),
+                ],
               ),
-              itemCount: _locations.length,
-              itemBuilder: (context, index) {
-                final loc = _locations[index];
-                final isSelected = _selectedLocation == loc['id'];
+              const SizedBox(height: 10),
 
-                // Get the icon path, fall back to a default if missing
-                final iconPath = locationsIcons[loc['icon_id'] ?? 0];
-
-                // Optional: set a background color similar to home_page
-                final colorId = loc['color_id'] ?? 0;
-                final bgColor = (colorId >= 0 && colorId < availableColors.length)
-                    ? availableColors[colorId]
-                    : Colors.grey[200];
-
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedLocation = loc['id']),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      border: Border.all(color: isSelected ? Colors.blue : Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(iconPath, width: 24, height: 24), // smaller icons
-                        const SizedBox(height: 4),
-                        Text(
-                          loc['name'] ?? 'Unnamed',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), // smaller text
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+              // Quantity & Unit
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove),
+                    onPressed: () {
+                      int current = int.tryParse(_quantityController.text) ?? 1;
+                      if (current > 1) _quantityController.text = '${current - 1}';
+                      setState(() {});
+                    },
+                  ),
+                  SizedBox(width: 50, child: TextField(controller: _quantityController, textAlign: TextAlign.center)),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      int current = int.tryParse(_quantityController.text) ?? 1;
+                      _quantityController.text = '${current + 1}';
+                      setState(() {});
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 60,
+                    child: TextField(
+                      controller: _unitValueController, // separate controller for the number
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Value'),
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 10),
+                  const SizedBox(width: 10),
+                  DropdownButton<String>(
+                    value: _selectedUnitText,
+                    hint: const Text('Unit'),
+                    items: unitsTextList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    onChanged: (v) => setState(() => _selectedUnitText = v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
 
-            // Expiration Date
-            Row(
-              children: [
-                const Text('Expiration: '),
-                Text(_expiryDate != null ? '${_expiryDate!.toLocal()}'.split(' ')[0] : 'None'),
-                IconButton(
-                  icon: const Icon(Icons.calendar_today),
-                  onPressed: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime(2100),
-                    );
-                    if (date != null) setState(() => _expiryDate = date);
-                  },
-                ),
-              ],
-            ),
+              // Icons
+              Wrap(
+                spacing: 10,
+                children: List.generate(_displayedIcons.length, (index) {
+                  return GestureDetector(
+                    onTap: () => setState(() {   FocusScope.of(context).unfocus(); _selectedIcon = index;}),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _selectedIcon == index ? Colors.blue : Colors.transparent, width: 2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: buildItemIcon(_displayedIcons[index], size: 40),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 20),
 
-            // Barcode scanner + Recently deleted
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _scanBarcode,
-                  icon: const Icon(Icons.qr_code),
-                  label: const Text('Scan Barcode'),
+              // Locations
+              if (_loadingLocations) const CircularProgressIndicator(),
+              if (!_loadingLocations)
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
                 ),
-                ElevatedButton.icon(
-                  onPressed: _pickRecentlyDeleted,
-                  icon: const Icon(Icons.auto_delete),
-                  label: const Text('Recently Deleted'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
+                itemCount: _locations.length,
+                itemBuilder: (context, index) {
+                  final loc = _locations[index];
+                  final isSelected = _selectedLocation == loc['id'];
 
-            // Save button
-            ElevatedButton(
-              onPressed: _saveItem,
-              child: const Text('Save'),
-            ),
-          ],
+                  // Get the icon path, fall back to a default if missing
+                  final iconPath = locationsIcons[loc['icon_id'] ?? 0];
+
+                  // Optional: set a background color similar to home_page
+                  final colorId = loc['color_id'] ?? 0;
+                  final bgColor = (colorId >= 0 && colorId < availableColors.length)
+                      ? availableColors[colorId]
+                      : Colors.grey[200];
+
+                  return GestureDetector(
+                    onTap: () => setState(() {   FocusScope.of(context).unfocus(); _selectedLocation = loc['id'];}),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        border: Border.all(color: isSelected ? Colors.blue : Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(iconPath, width: 24, height: 24), // smaller icons
+                          const SizedBox(height: 4),
+                          Text(
+                            loc['name'] ?? 'Unnamed',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), // smaller text
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Expiration Date
+              Row(
+                children: [
+                  const Text('Expiration: '),
+                  Text(_expiryDate != null ? '${_expiryDate!.toLocal()}'.split(' ')[0] : 'None'),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    onPressed: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (date != null) setState(() => _expiryDate = date);
+                    },
+                  ),
+                ],
+              ),
+
+              // Barcode scanner + Recently deleted
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _scanBarcode,
+                    icon: const Icon(Icons.qr_code),
+                    label: const Text('Scan Barcode'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _pickRecentlyDeleted,
+                    icon: const Icon(Icons.auto_delete),
+                    label: const Text('Recently Deleted'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: _saveItemAndLeave,
+                    child: const Text('Save and quit'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _saveAndContinueAdding, // implement this handler
+                    child: const Text('Save and continue adding'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
+      )
     );
   }
 }
